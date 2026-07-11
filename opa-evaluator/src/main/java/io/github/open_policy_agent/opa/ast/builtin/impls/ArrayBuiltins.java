@@ -4,6 +4,7 @@ import static java.lang.Math.max;
 import static java.lang.Math.min;
 import static io.github.open_policy_agent.opa.ast.builtin.impls.utils.ArgHelper.getArg;
 
+import java.util.ArrayList;
 import java.util.Collections;
 import java.util.List;
 import java.util.Map;
@@ -23,7 +24,8 @@ public class ArrayBuiltins {
     return Map.of(
         "array.concat", new ArrayConcat()::eval,
         "array.slice", new ArraySlice()::eval,
-        "array.reverse", new ArrayReverse()::eval);
+        "array.reverse", new ArrayReverse()::eval,
+        "array.flatten", new ArrayFlatten()::eval);
     }
 
     private static final class ArrayConcat {
@@ -136,6 +138,59 @@ public class ArrayBuiltins {
             RegoArray rev = new RegoArray(arr);
             Collections.reverse(rev.getValue());
             return rev;
+        }
+    }
+
+    private static final class ArrayFlatten {
+    @OpaBuiltin(
+        name = "array.flatten",
+        description = "Flattens a nested array structure by one level.",
+        args = {
+          @OpaType(
+              type = "array",
+              name = "arr",
+              description = "the array to flatten",
+              dynamic = @OpaDynamic(type = "any")),
+          @OpaType(
+              type = "number",
+              name = "depth",
+              description = "the number of levels to flatten (default: -1 for unlimited)")
+        },
+        result =
+            @OpaType(
+                type = "array",
+                name = "result",
+                description = "the flattened array",
+                dynamic = @OpaDynamic(type = "any")))
+    public RegoValue eval(EvaluationContext ctx, RegoValue[] args) {
+            if (!(args[0] instanceof RegoArray)) {
+              throw new TypeError("array.flatten: operand 1 must be array but got " + args[0].getTypeName());
+            }
+            RegoArray arr = (RegoArray) args[0];
+            int depth;
+            if (args.length > 1) {
+              depth = getArg(args, 1, RegoInt32.class).getValue();
+            } else {
+              depth = -1;
+            }
+            return flatten(arr.getValue(), depth);
+        }
+
+        private RegoArray flatten(List<RegoValue> values, int depth) {
+            RegoArray result = new RegoArray();
+            if (depth == 0) {
+                result.getValue().addAll(values);
+                return result;
+            }
+            int nextDepth = (depth < 0) ? -1 : depth - 1;
+            for (RegoValue value : values) {
+                if (value instanceof RegoArray) {
+                    result.getValue().addAll(flatten(((RegoArray) value).getValue(), nextDepth).getValue());
+                } else {
+                    result.getValue().add(value);
+                }
+            }
+            return result;
         }
     }
 }
